@@ -70,33 +70,33 @@ const editor = EditorView({
 
 //import * as CodeMirror from "codemirror"
 //import {EditorView, Range, Decoration} from "@codemirror/view"
-import {EditorView, Decoration, keymap} from "@codemirror/view"
-import {StateField, StateEffect} from "@codemirror/state"
-import {StreamLanguage} from "@codemirror/language"
-import {javascript} from "@codemirror/lang-javascript"
-import {parseMixed} from "@lezer/common"
-import readOnlyRangesExtension from 'codemirror-readonly-ranges'
-import {defaultKeymap, history, historyKeymap} from "@codemirror/commands"
+import { EditorView, Decoration, keymap } from "@codemirror/view"
+import { StateField, StateEffect } from "@codemirror/state"
+import { StreamLanguage } from "@codemirror/language"
+import { javascript } from "@codemirror/lang-javascript"
+import { parseMixed } from "@lezer/common"
+import readOnlyRangesExtension from "codemirror-readonly-ranges"
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands"
 
-import setImmediate from "queue-microtask";
+import setImmediate from "queue-microtask"
 
 export const EXEC_STATE = {
   EDIT: "edit",
-  EXEC: "exec"
-};
+  EXEC: "exec",
+}
 
 export const PARSE_STATUS = {
   NULL: "",
   OK: "OK",
   INCOMPLETE: "Incomplete",
   PARSE_ERR: "ParseError",
-  ERR: "Err"
-};
+  ERR: "Err",
+}
 
-const MAX_HISTORY_DEFAULT = 2500;
+const MAX_HISTORY_DEFAULT = 2500
 
-const HISTORY_KEY_DEFAULT = "shell.history";
-const DEFAULT_PROMPT_CLASS = "shell-prompt";
+const HISTORY_KEY_DEFAULT = "shell.history"
+const DEFAULT_PROMPT_CLASS = "shell-prompt"
 
 function posToOffset(doc, pos) {
   //return doc.line(pos.line + 1).from + pos.ch
@@ -106,7 +106,7 @@ function posToOffset(doc, pos) {
 function offsetToPos(doc, offset) {
   let line = doc.lineAt(offset)
   //return {line: line.number - 1, ch: offset - line.from}
-  return {line: line.number, ch: offset - line.from}
+  return { line: line.number, ch: offset - line.from }
 }
 
 // https://codemirror.net/docs/migration/#marked-text
@@ -115,23 +115,25 @@ const filterMarks = StateEffect.define()
 // This value must be added to the set of extensions to enable this
 const markFieldExtension = StateField.define({
   // Start with an empty set of decorations
-  create() { return Decoration.none },
+  create() {
+    return Decoration.none
+  },
   // This is called whenever the editor updates—it computes the new set
   update(value, tr) {
     // Move the decorations to account for document changes
     value = value.map(tr.changes)
     // If this transaction adds or removes decorations, apply those changes
     for (let effect of tr.effects) {
-      if (effect.is(addMarks)) value = value.update({add: effect.value, sort: true})
-      else if (effect.is(filterMarks)) value = value.update({filter: effect.value})
+      if (effect.is(addMarks))
+        value = value.update({ add: effect.value, sort: true })
+      else if (effect.is(filterMarks))
+        value = value.update({ filter: effect.value })
     }
     return value
   },
   // Indicate that this field provides a set of decorations
-  provide: f => EditorView.decorations.from(f)
+  provide: (f) => EditorView.decorations.from(f),
 })
-
-
 
 /**
  * shell implmentation based on CodeMirror (which is awesome)
@@ -149,35 +151,34 @@ const markFieldExtension = StateField.define({
  * function_key_callback: called on function keys (+ some others)
  *
  */
-export default function Shell( CodeMirror_, opts ){
-
+export default function Shell(CodeMirror_, opts) {
   /** @type {import("codemirror").EditorView} */
-  var view;
+  var view
 
-  var state = EXEC_STATE.EDIT;
-  var prompt_text = "";
-  var instance = this;
-  instance.opts = opts;
-  instance.cm = null;
-  this.function_tip = {};
-  this.EXEC_STATE = EXEC_STATE;
-  this.PARSE_STATUS = PARSE_STATUS;
-  instance.language = null;
+  var state = EXEC_STATE.EDIT
+  var prompt_text = ""
+  var instance = this
+  instance.opts = opts
+  instance.cm = null
+  this.function_tip = {}
+  this.EXEC_STATE = EXEC_STATE
+  this.PARSE_STATUS = PARSE_STATUS
+  instance.language = null
 
-  var prompt_len = 0;
+  var prompt_len = 0
 
-  var command_buffer = [];
-  var paste_buffer = [];
-  
-  var unstyled_lines = [];
-  var block_reset = [];
-  
-  var unstyled_flag = false;
-  var cached_prompt = null;
+  var command_buffer = []
+  var paste_buffer = []
 
-  var event_cache = null;
-  var event_cache_skip = false;
-  var event_playback = false;
+  var unstyled_lines = []
+  var block_reset = []
+
+  var unstyled_flag = false
+  var cached_prompt = null
+
+  var event_cache = null
+  var event_cache_skip = false
+  var event_playback = false
 
   /**
    * FIXME: cap and flush this thing at (X) number of lines
@@ -187,67 +188,68 @@ export default function Shell( CodeMirror_, opts ){
    * on new command.
    */
   class History {
-
     /** @type {string | null} */
     current_line = null
     commands = []
     actual_commands = []
     pointer = 0
 
-    reset_pointer(){
-      this.pointer = 0;
-      this.commands = this.actual_commands.slice(0);
+    reset_pointer() {
+      this.pointer = 0
+      this.commands = this.actual_commands.slice(0)
     }
 
-    push( line ){
-      this.actual_commands.push( line );
-      this.commands = this.actual_commands.slice(0);
-    }
-    
-    save(opts){
-      opts = opts || {};
-      var max = opts.max || MAX_HISTORY_DEFAULT;
-      var key = opts.key || HISTORY_KEY_DEFAULT;
-      localStorage.setItem( key, JSON.stringify( this.actual_commands.slice(-max)));
-    }
-    
-    restore(opts){
-      opts = opts || {};
-      var key = opts.key || HISTORY_KEY_DEFAULT;
-      var val = localStorage.getItem(key);
-      if( val ) this.actual_commands = JSON.parse( val );
-      this.reset_pointer();
+    push(line) {
+      this.actual_commands.push(line)
+      this.commands = this.actual_commands.slice(0)
     }
 
-    clear(){
-        this.actual_commands = [];
-        this.commands = [];
-        this.pointer = 0;
-        this.save();
+    save(opts) {
+      opts = opts || {}
+      var max = opts.max || MAX_HISTORY_DEFAULT
+      var key = opts.key || HISTORY_KEY_DEFAULT
+      localStorage.setItem(
+        key,
+        JSON.stringify(this.actual_commands.slice(-max))
+      )
     }
-  };
 
-  const history = new History();
+    restore(opts) {
+      opts = opts || {}
+      var key = opts.key || HISTORY_KEY_DEFAULT
+      var val = localStorage.getItem(key)
+      if (val) this.actual_commands = JSON.parse(val)
+      this.reset_pointer()
+    }
+
+    clear() {
+      this.actual_commands = []
+      this.commands = []
+      this.pointer = 0
+      this.save()
+    }
+  }
+
+  const history = new History()
 
   /**
    * overlay mode to support unstyled text -- file contents (the pager)
-   * in our particular case but could be anything.  this is based on 
+   * in our particular case but could be anything.  this is based on
    * CM's "overlay" mode, but that one doesn't work because it parses
    * regardless and we get stuck in string-mode after a stray apostrophe.
-   * 
-   * in this one, null styling is the default, and greedy; but if we are 
+   *
+   * in this one, null styling is the default, and greedy; but if we are
    * not unstyled, then we pass through to (base).  base should be a string
    * mode name, which must have been previously registered.
    */
   /**
-   * 
-   * // TODO param {import("@codemirror/language").Language} innerLanguage 
-   * // TODO param {import("@codemirror/legacy-modes").Mode} innerMode 
-   * @param {*} base 
+   *
+   * // TODO param {import("@codemirror/language").Language} innerLanguage
+   * // TODO param {import("@codemirror/legacy-modes").Mode} innerMode
+   * @param {*} base
    */
 
-  function init_overlay_mode( base ){
-
+  function init_overlay_mode(base) {
     // CodeMirror.defineMode in codemirror 6
     // https://discuss.codemirror.net/t/how-to-create-custom-syntax-highlighter-using-stream-parser/3752
     // https://github.com/codemirror/legacy-modes/blob/main/mode/shell.js
@@ -262,21 +264,20 @@ export default function Shell( CodeMirror_, opts ){
       return { ... };
     });
     */
-      //var config = {} // TODO
-      //var parserConfig = {} // TODO
+    //var config = {} // TODO
+    //var parserConfig = {} // TODO
 
-      //var base = CM.getMode( config, parserConfig.backdrop || baseName );
+    //var base = CM.getMode( config, parserConfig.backdrop || baseName );
 
-      var outerLanguage = StreamLanguage.define({
-        
-        startState: function() {
-          return {
-            base: base.startState(),
-            linecount: 0
-          };
-        },
-        
-        /* FIXME TypeError: base.copyState is not a function
+    var outerLanguage = StreamLanguage.define({
+      startState: function () {
+        return {
+          base: base.startState(),
+          linecount: 0,
+        }
+      },
+
+      /* FIXME TypeError: base.copyState is not a function
         copyState: function(state) {
           return {
             base: base.copyState(state.base),
@@ -285,42 +286,42 @@ export default function Shell( CodeMirror_, opts ){
         },
         */
 
-        token: function(stream, state) {
-          if( stream.sol()){
-            var lc = state.linecount;
-            state.linecount++;
-            if( unstyled_flag || unstyled_lines[lc] ){
-              stream.skipToEnd();
-              return "unstyled";
-            }
-            if( block_reset[lc] ){
-              state.base = base.startState();
-            }
+      token: function (stream, state) {
+        if (stream.sol()) {
+          var lc = state.linecount
+          state.linecount++
+          if (unstyled_flag || unstyled_lines[lc]) {
+            stream.skipToEnd()
+            return "unstyled"
           }
-          return base.token(stream, state.base);
-          
+          if (block_reset[lc]) {
+            state.base = base.startState()
+          }
+        }
+        return base.token(stream, state.base)
+      },
+
+      // FIXME TypeError: Cannot read properties of undefined (reading 'unit')
+      indent:
+        base.indent &&
+        function (state, textAfter) {
+          console.log("outerLanguage indent", { base, state, textAfter })
+          return base.indent(state.base, textAfter)
         },
 
-        // FIXME TypeError: Cannot read properties of undefined (reading 'unit')
-        indent: base.indent && function(state, textAfter) {
-          console.log("outerLanguage indent", {base, state, textAfter})
-          return base.indent(state.base, textAfter);
-        },
-        
-        // FIXME
-        //electricChars: base.electricChars,
+      // FIXME
+      //electricChars: base.electricChars,
 
-        // FIXME
-        //innerMode: function(state) { return {state: state.base, mode: base}; },
+      // FIXME
+      //innerMode: function(state) { return {state: state.base, mode: base}; },
 
-        blankLine: function(state) {
-          state.linecount++;
-          if (base.blankLine) base.blankLine(state.base);
-        },
+      blankLine: function (state) {
+        state.linecount++
+        if (base.blankLine) base.blankLine(state.base)
+      },
+    })
 
-      })
-
-      /* TODO overlay LRLanguage and StreamLanguage
+    /* TODO overlay LRLanguage and StreamLanguage
 
       const mixedParser = outerLanguage.parser.configure({
         // simple: one node has the inner content
@@ -339,309 +340,331 @@ export default function Shell( CodeMirror_, opts ){
       const mixedLang = LRLanguage.define({parser: mixedParser})
       */
 
-      instance.language = outerLanguage;
-    }
-  
-    /** destructively clear all history */
-    this.clearHistory = function(){
-        history.clear();
-    };
+    instance.language = outerLanguage
+  }
 
-  /** 
+  /** destructively clear all history */
+  this.clearHistory = function () {
+    history.clear()
+  }
+
+  /**
    * get the CM object.  necessary for some clients
    * to handle events.  FIXME -- pass through events.
    */
-  this.getCM = function(){
-    return view;
-  };
+  this.getCM = function () {
+    return view
+  }
 
   /** set CM option directly -- REMOVE */
-  this.setOption = function( option, value ){
-    if( opts.debug ) console.info( "set option", option, value );
+  this.setOption = function (option, value) {
+    if (opts.debug) console.info("set option", option, value)
     // FIXME
     //cm.setOption( option, value );
-  };
+  }
 
   /** get CM option directly -- REMOVE */
-  this.getOption = function( option ){
-    if( opts.debug ) console.info( "get option", option );
+  this.getOption = function (option) {
+    if (opts.debug) console.info("get option", option)
     // FIXME
     //return cm.getOption( option );
-  };
+  }
 
   /** cache events if we're blocking */
-  var cacheEvent = function(event){
-    if( event_cache && !event_playback ){
-      if( event_cache_skip ){
-        if( event.type === "keyup" && event.key === "Enter" )
-          event_cache_skip = false;
-      }
-      else {
-        event_cache.push( event );
+  var cacheEvent = function (event) {
+    if (event_cache && !event_playback) {
+      if (event_cache_skip) {
+        if (event.type === "keyup" && event.key === "Enter")
+          event_cache_skip = false
+      } else {
+        event_cache.push(event)
       }
     }
-  };
+  }
 
-  /** 
+  /**
    * when unblocking (exiting an explicit block or exec),
    * replay cached keyboard events.  in some cases a played-back
    * event may trigger execution, which turns caching back on.
-   * in that case, stop processing and dump all the 
-   * original source events back into the cache. 
+   * in that case, stop processing and dump all the
+   * original source events back into the cache.
    */
-  var playbackEvents = function(){
-  
+  var playbackEvents = function () {
     // flush cache.  set to null to act as flag
-    
-    var tmp = event_cache;
-    event_cache = null;
-    event_cache_skip = false;
-    
-    if( tmp && tmp.length ){
+
+    var tmp = event_cache
+    event_cache = null
+    event_cache_skip = false
+
+    if (tmp && tmp.length) {
       console.log(`playbackEvents: tmp=${JSON.stringify(tmp)}`)
       // FIXME
-      var inputTarget = view.getInputField(); 
-      tmp.forEach( function( src ){
-
-        if( event_cache ){
-          cacheEvent( src );
-          return;
+      var inputTarget = view.getInputField()
+      tmp.forEach(function (src) {
+        if (event_cache) {
+          cacheEvent(src)
+          return
         }
 
-        var event = new KeyboardEvent( src.type, src );
-        Object.defineProperties( event, {
-          charCode: { get: function(){ return src.charCode; }},
-          which: { get: function(){ return src.which; }},
-          keyCode: { get: function(){ return src.keyCode; }}, 
-          key: { get: function(){ return src.key; }},     
-          char: { get: function(){ return src.char; }},
-          target: { get: function(){ return src.target; }}
-        });
-        event_playback = true;
-        inputTarget.dispatchEvent( event );
-        event_playback = false;
-        
-      });
+        var event = new KeyboardEvent(src.type, src)
+        Object.defineProperties(event, {
+          charCode: {
+            get: function () {
+              return src.charCode
+            },
+          },
+          which: {
+            get: function () {
+              return src.which
+            },
+          },
+          keyCode: {
+            get: function () {
+              return src.keyCode
+            },
+          },
+          key: {
+            get: function () {
+              return src.key
+            },
+          },
+          char: {
+            get: function () {
+              return src.char
+            },
+          },
+          target: {
+            get: function () {
+              return src.target
+            },
+          },
+        })
+        event_playback = true
+        inputTarget.dispatchEvent(event)
+        event_playback = false
+      })
     }
-    
-  };
+  }
 
-  /** 
-   * block.  this is used for operations called by the code, rather than 
+  /**
+   * block.  this is used for operations called by the code, rather than
    * the user -- we don't want the user to be able to run commands, because
    * they'll fail.
    * @param {string} message
    */
   this.block = function block(message) {
-
     console.log(`block: state=${JSON.stringify(state)}`)
 
     // this bit is right from exec:
 
-    if( state === EXEC_STATE.EXEC ){
-      return false;
+    if (state === EXEC_STATE.EXEC) {
+      return false
     }
 
     console.log("block: view", view)
 
-    var doc = view.state.doc;
-    var lineno = doc.lines;
-    var line = doc.line( lineno );
+    var doc = view.state.doc
+    var lineno = doc.lines
+    var line = doc.line(lineno)
 
     console.log(`block: message=${JSON.stringify(message)}`)
 
-    if( !message ) message = "\n";
-    else message = "\n" + message + "\n";
+    if (!message) message = "\n"
+    else message = "\n" + message + "\n"
 
     //doc.replaceRange( message, { line: lineno+1, ch: 0 }, undefined, "prompt");
-    var pos = doc.line(doc.lines).from;
-    view.dispatch({changes: {from: pos, to: undefined, insert: message}})
+    var pos = doc.line(doc.lines).from
+    view.dispatch({ changes: { from: pos, to: undefined, insert: message } })
     //view.dispatch({selection: {anchor: pos}})
 
-    state = EXEC_STATE.EXEC;
+    state = EXEC_STATE.EXEC
 
-    var command = line.text.slice(prompt_len);
-    command_buffer.push(command);
+    var command = line.text.slice(prompt_len)
+    command_buffer.push(command)
 
-    if( command.trim().length > 0 ){
-      history.push(command);
-      history.save(); // this is perhaps unecessarily aggressive
-    } 
+    if (command.trim().length > 0) {
+      history.push(command)
+      history.save() // this is perhaps unecessarily aggressive
+    }
 
     // this automatically resets the pointer (NOT windows style)
-    history.reset_pointer();
+    history.reset_pointer()
 
     // turn on event caching
-    event_cache = [];
-  
+    event_cache = []
+
     // now leave it in this state...
-    return true;
-    
-  };
+    return true
+  }
 
   /** unblock, should be symmetrical. */
-  this.unblock = function( result, ignore_cached_events ){
-
+  this.unblock = function (result, ignore_cached_events) {
     // again this is from exec (but we're skipping the
     // bit about pasting)
 
-    state = EXEC_STATE.EDIT;
-        
-    if( result && result.prompt ){
-      command_buffer = [];
-      set_prompt( result.prompt || instance.opts.initial_prompt, result.prompt_class, result.continuation );
-    }
-    else {
-      var ps = result ? result.parsestatus || PARSE_STATUS.OK : PARSE_STATUS.NULL;
-      if( ps === PARSE_STATUS.INCOMPLETE ){
-        set_prompt( instance.opts.continuation_prompt, undefined, true );
+    state = EXEC_STATE.EDIT
+
+    if (result && result.prompt) {
+      command_buffer = []
+      set_prompt(
+        result.prompt || instance.opts.initial_prompt,
+        result.prompt_class,
+        result.continuation
+      )
+    } else {
+      var ps = result
+        ? result.parsestatus || PARSE_STATUS.OK
+        : PARSE_STATUS.NULL
+      if (ps === PARSE_STATUS.INCOMPLETE) {
+        set_prompt(instance.opts.continuation_prompt, undefined, true)
+      } else {
+        command_buffer = []
+        set_prompt(instance.opts.initial_prompt)
       }
-      else {
-        command_buffer = [];
-        set_prompt( instance.opts.initial_prompt );
-      }
     }
-    
-    if( !ignore_cached_events ) playbackEvents();
-    
-  };
+
+    if (!ignore_cached_events) playbackEvents()
+  }
 
   /**
-   * get history as array 
+   * get history as array
    */
-  this.get_history = function(){
-    return history.actual_commands.slice(0);
-  };
+  this.get_history = function () {
+    return history.actual_commands.slice(0)
+  }
 
   /**
    * insert an arbitrary node, via CM's widget
-   * 
-   * @param scroll -- scroll to the following line so the node is visible 
+   *
+   * @param scroll -- scroll to the following line so the node is visible
    */
-  this.insert_node = function(node, scroll){
-
-    var doc = view.state.doc;
-    var line = Math.max( doc.lines - 1, 0 );
-    view.addLineWidget( line, node, {
-      handleMouseEvents: true
-    });
-    if( scroll ) view.dispatch({effects: EditorView.scrollIntoView(doc.line(line).from)})
-  };
+  this.insert_node = function (node, scroll) {
+    var doc = view.state.doc
+    var line = Math.max(doc.lines - 1, 0)
+    view.addLineWidget(line, node, {
+      handleMouseEvents: true,
+    })
+    if (scroll)
+      view.dispatch({ effects: EditorView.scrollIntoView(doc.line(line).from) })
+  }
 
   /**
    * select all -- this doesn't seem to work using the standard event... ?
    */
-  this.select_all = function(){
+  this.select_all = function () {
     //cm.execCommand( 'selectAll' );
-    view.dispatch({selection: {anchor: 0, head: view.state.doc.length}})
-  };
+    view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } })
+  }
 
   /**
    * handler for command responses, stuff that the system
    * sends to the shell (callbacks, generally).  optional className is a
-   * style applied to the block.  "unstyled", if set, prevents language 
+   * style applied to the block.  "unstyled", if set, prevents language
    * styling on the block.
    */
   this.response = function response(text, className, unstyled) {
-
     // FIXME add newline after result
 
     console.log(`response: text=${JSON.stringify(text)}`)
 
-    var doc = view.state.doc;
-    var lineno = doc.lines;
-    var end, start = lineno;
+    var doc = view.state.doc
+    var lineno = doc.lines
+    var end,
+      start = lineno
 
-    if( text && typeof text !== "string" ){
-      try { text = text.toString(); }
-      catch( e ){
-        text = "Unrenderable message: " + e.message;
+    if (text && typeof text !== "string") {
+      try {
+        text = text.toString()
+      } catch (e) {
+        text = "Unrenderable message: " + e.message
       }
-    };
+    }
 
-    // don't add newlines.  respect existing length.  this is so we 
+    // don't add newlines.  respect existing length.  this is so we
     // can handle \r (without a \n).  FIXME: if there's a prompt, go
     // up one line.
-    
-    var lastline = doc.line(lineno);
-    var ch = lastline ? lastline.length : 0;
+
+    var lastline = doc.line(lineno)
+    var ch = lastline ? lastline.length : 0
 
     // second cut, a little more thorough
     // one more patch, to stop breaking on windows CRLFs
-    
-    var lines = text.split( "\n" );
-    var replace_end = undefined;
-    var inline_replacement = false;
+
+    var lines = text.split("\n")
+    var replace_end = undefined
+    var inline_replacement = false
 
     // fix here in case there's already a prompt (this is a rare case?)
 
-    if( state !== EXEC_STATE.EXEC ){
-      
-            ch = 0; // insert before anything else on line
+    if (state !== EXEC_STATE.EXEC) {
+      ch = 0 // insert before anything else on line
 
       // this is new: in the event that there is already a prompt,
       // and we are maintaining styling "breaks", then we may
       // need to offset the last break by some number of lines.
-      
+
       // actually we know it's only going to be the last one, so
       // we can skip the loop.
-      
-      if( lines.length > 1 && block_reset.length ){
-        var blast = block_reset.length - 1 ;
-        block_reset[ blast ] = undefined;
-        block_reset[ blast + lines.length - 1 ] = 1;
+
+      if (lines.length > 1 && block_reset.length) {
+        var blast = block_reset.length - 1
+        block_reset[blast] = undefined
+        block_reset[blast + lines.length - 1] = 1
       }
-      
     }
 
     // parse carriage-return \r
-    text = "";
-    for( var i = 0; i< lines.length; i++ ){
-      var overwrite = lines[i].split( '\r' );
-      if( i ) text += "\n";
-      else if( overwrite.length > 1 ) inline_replacement = true;
-      if (overwrite.length > 1 ) {
-        var final_text = "";
-        for( var j = overwrite.length - 1; j >= 0; j-- ){
-          final_text = final_text + overwrite[j].substring( final_text.length );
+    text = ""
+    for (var i = 0; i < lines.length; i++) {
+      var overwrite = lines[i].split("\r")
+      if (i) text += "\n"
+      else if (overwrite.length > 1) inline_replacement = true
+      if (overwrite.length > 1) {
+        var final_text = ""
+        for (var j = overwrite.length - 1; j >= 0; j--) {
+          final_text = final_text + overwrite[j].substring(final_text.length)
         }
-        text += final_text;
-      }
-      else text += lines[i];
+        text += final_text
+      } else text += lines[i]
     }
     console.log(`response: text2=${JSON.stringify(text)}`)
-    if( inline_replacement ){
-      replace_end = { line: start, ch: ch };
-      ch = 0;	
+    if (inline_replacement) {
+      replace_end = { line: start, ch: ch }
+      ch = 0
     }
 
     // for styling before we have built the table
-    if( unstyled ) unstyled_flag = true;
+    if (unstyled) unstyled_flag = true
 
     //doc.replaceRange( text, { line: start, ch: ch }, replace_end, "callback");
-    view.dispatch({changes: {
-      from: posToOffset(doc, { line: start, ch: ch }),
-      to: replace_end && posToOffset(doc, replace_end),
-      insert: text,
-      // TODO class callback?
-    }})
+    view.dispatch({
+      changes: {
+        from: posToOffset(doc, { line: start, ch: ch }),
+        to: replace_end && posToOffset(doc, replace_end),
+        insert: text,
+        // TODO class callback?
+      },
+    })
 
-    end = doc.lines;
-    lastline = doc.line(end);
-    var endch = lastline.text.length;
-    console.log(`doc.lines=${doc.lines}  lastline.text=${lastline.text}  endch=${endch}`)
+    end = doc.lines
+    lastline = doc.line(end)
+    var endch = lastline.text.length
+    console.log(
+      `doc.lines=${doc.lines}  lastline.text=${lastline.text}  endch=${endch}`
+    )
 
     // TODO what is this?
-    if( unstyled ){
-      var u_end = end;
-      if( endch == 0 ) u_end--;
-      if( u_end >= start ){
-        for(
+    if (unstyled) {
+      var u_end = end
+      if (endch == 0) u_end--
+      if (u_end >= start) {
+        for (
           // @ts-ignore
           var i = start;
-          i<= u_end;
+          i <= u_end;
           i++
-        ) unstyled_lines[i] = 1;
+        )
+          unstyled_lines[i] = 1
       }
     }
 
@@ -654,16 +677,16 @@ export default function Shell( CodeMirror_, opts ){
     }
     */
 
-    if( className ){
-      const from = posToOffset(doc, { line: start, ch: ch });
-      const to = posToOffset(doc, { line: end, ch: endch });
+    if (className) {
+      const from = posToOffset(doc, { line: start, ch: ch })
+      const to = posToOffset(doc, { line: end, ch: endch })
       if (from < to) {
         // https://codemirror.net/docs/migration/#marked-text
         const strikeMark = Decoration.mark({
           attributes: {
             //style: "text-decoration: line-through",
             className: className,
-          }
+          },
         })
         console.dir([
           `addMarks: className = ${className}`,
@@ -671,10 +694,7 @@ export default function Shell( CodeMirror_, opts ){
           { line: end, ch: endch },
         ])
         view.dispatch({
-          effects: addMarks.of([strikeMark.range(
-            from,
-            to,
-          )])
+          effects: addMarks.of([strikeMark.range(from, to)]),
         })
       }
       // else: range is empty
@@ -690,18 +710,19 @@ export default function Shell( CodeMirror_, opts ){
     */
     //view.dispatch({effects: EditorView.scrollIntoView(doc.line(doc.lines).from)})
     // scroll to end
-    view.dispatch({effects: EditorView.scrollIntoView(doc.length)})
+    view.dispatch({ effects: EditorView.scrollIntoView(doc.length) })
 
     // wait for new doc.length, then set cursor
     //setImmediate(() => view.dispatch({selection: {anchor: doc.length}})); // old doc -> wrong length
-    setImmediate(() => view.dispatch({selection: {anchor: view.state.doc.length}}));
+    setImmediate(() =>
+      view.dispatch({ selection: { anchor: view.state.doc.length } })
+    )
 
-    // the problem with that is that it's annoying when you want to see 
+    // the problem with that is that it's annoying when you want to see
     // the messages (for long-running code, for example).
-  
-    unstyled_flag = false;
 
-  };
+    unstyled_flag = false
+  }
 
   /**
    * this is history in the sense of up arrow/down arrow in the shell.
@@ -710,77 +731,80 @@ export default function Shell( CodeMirror_, opts ){
    *
    * FIXME: move more of this into the history class
    */
-  function shell_history( up ){
-
-    if( state == EXEC_STATE.EXEC ) return;
+  function shell_history(up) {
+    if (state == EXEC_STATE.EXEC) return
 
     // can we move in this direction? [FIXME: bell?]
-    if( up && history.pointer >= history.commands.length ) return;
-    if( !up && history.pointer == 0 ) return;
+    if (up && history.pointer >= history.commands.length) return
+    if (!up && history.pointer == 0) return
 
-    var doc = view.state.doc;
-    var lineno = doc.lines;
-    var line = doc.line( lineno ).text.slice(prompt_len);
+    var doc = view.state.doc
+    var lineno = doc.lines
+    var line = doc.line(lineno).text.slice(prompt_len)
 
     // capture current (see history class for note on soft persistence)
-    if( history.pointer == 0 ) history.current_line = line;
-    else history.commands[ history.commands.length - history.pointer ] = line;
+    if (history.pointer == 0) history.current_line = line
+    else history.commands[history.commands.length - history.pointer] = line
 
     // move
-    if( up ) history.pointer++;
-    else history.pointer--;
+    if (up) history.pointer++
+    else history.pointer--
 
     // at current, use our buffer
-    if( history.pointer == 0 ){
+    if (history.pointer == 0) {
       //doc.replaceRange( history.current_line, { line: lineno, ch: prompt_len }, {line: lineno, ch: prompt_len + line.length }, "history");
-      view.dispatch({changes: {
-        from: posToOffset(doc, { line: lineno, ch: prompt_len }),
-        to: posToOffset(doc, {line: lineno, ch: prompt_len + line.length }),
-        insert: String(history.current_line), // FIXME
-      }})
-    }
-    else {
-      var text = history.commands[ history.commands.length - history.pointer ];
+      view.dispatch({
+        changes: {
+          from: posToOffset(doc, { line: lineno, ch: prompt_len }),
+          to: posToOffset(doc, { line: lineno, ch: prompt_len + line.length }),
+          insert: String(history.current_line), // FIXME
+        },
+      })
+    } else {
+      var text = history.commands[history.commands.length - history.pointer]
       // FIXME
-      doc.replaceRange( text,
+      doc.replaceRange(
+        text,
         { line: lineno, ch: prompt_len },
-        { line: lineno, ch: prompt_len + line.length }, "history");
+        { line: lineno, ch: prompt_len + line.length },
+        "history"
+      )
     }
 
-    var linelen = view.state.doc.line( lineno ).text.length;
+    var linelen = view.state.doc.line(lineno).text.length
 
     // after changing the text the caret should be at the end of the line
     // (and the line should be in view)
 
-    view.scrollIntoView( {line: lineno, ch: linelen });
-    view.state.doc.setSelection({ line: lineno, ch: linelen });
-
+    view.scrollIntoView({ line: lineno, ch: linelen })
+    view.state.doc.setSelection({ line: lineno, ch: linelen })
   }
 
   /**
    * set prompt with optional class
    */
-  function set_prompt( text, prompt_class, is_continuation ){
-    
-    if( typeof prompt_class === "undefined" )
-      prompt_class = DEFAULT_PROMPT_CLASS;
+  function set_prompt(text, prompt_class, is_continuation) {
+    if (typeof prompt_class === "undefined") prompt_class = DEFAULT_PROMPT_CLASS
 
-    if( typeof text === "undefined" ){
-      if( instance.opts ) prompt_text = instance.opts.default_prompt;
-      else text = "? " ;
+    if (typeof text === "undefined") {
+      if (instance.opts) prompt_text = instance.opts.default_prompt
+      else text = "? "
     }
 
-    prompt_text = text;	
+    prompt_text = text
 
     console.log("set_prompt: cm", view)
 
-    var doc = view.state.doc;	
-    var lineno = doc.lines;
+    var doc = view.state.doc
+    var lineno = doc.lines
     console.log("set_prompt: doc.lines", doc.lines)
-    console.log("set_prompt: cm.state.doc.line(doc.lines)", view.state.doc.line(doc.lines))
-    var lastline = view.state.doc.line(lineno).text;
+    console.log(
+      "set_prompt: cm.state.doc.line(doc.lines)",
+      view.state.doc.line(doc.lines)
+    )
+    var lastline = view.state.doc.line(lineno).text
 
-    if( !is_continuation ) block_reset[lineno] = 1;
+    if (!is_continuation) block_reset[lineno] = 1
 
     /*
     const docLength = doc.length;
@@ -798,17 +822,19 @@ export default function Shell( CodeMirror_, opts ){
     view.dispatch({selection: {anchor: docLength + 1}})
     */
 
-    prompt_len = lastline.length + prompt_text.length;
+    prompt_len = lastline.length + prompt_text.length
 
     console.log(`set_prompt: lastline=${lastline}  prompt_text=${prompt_text}`)
 
     //doc.replaceRange( prompt_text, { line: lineno, ch: lastline.length }, undefined, "prompt" );
-    view.dispatch({changes: {
-      from: posToOffset(doc, { line: lineno, ch: lastline.length }),
-      to: undefined,
-      //insert: prompt_text,
-      insert: prompt_text,
-    }})
+    view.dispatch({
+      changes: {
+        from: posToOffset(doc, { line: lineno, ch: lastline.length }),
+        to: undefined,
+        //insert: prompt_text,
+        insert: prompt_text,
+      },
+    })
 
     /* FIXME
     if( prompt_class ){
@@ -817,24 +843,27 @@ export default function Shell( CodeMirror_, opts ){
       });
     }
     */
-    if( prompt_class ){
+    if (prompt_class) {
       // https://codemirror.net/docs/migration/#marked-text
       const strikeMark = Decoration.mark({
         attributes: {
           //style: "text-decoration: line-through",
           className: prompt_class,
-        }
+        },
       })
-      false && console.dir([
-        `addMarks: prompt_class = ${prompt_class}`,
-        { line: lineno, ch: lastline.length },
-        { line: lineno, ch: prompt_len },
-      ])
+      false &&
+        console.dir([
+          `addMarks: prompt_class = ${prompt_class}`,
+          { line: lineno, ch: lastline.length },
+          { line: lineno, ch: prompt_len },
+        ])
       view.dispatch({
-        effects: addMarks.of([strikeMark.range(
-          posToOffset(doc, { line: lineno, ch: lastline.length }),
-          posToOffset(doc, { line: lineno, ch: prompt_len }),
-        )])
+        effects: addMarks.of([
+          strikeMark.range(
+            posToOffset(doc, { line: lineno, ch: lastline.length }),
+            posToOffset(doc, { line: lineno, ch: prompt_len })
+          ),
+        ]),
       })
     }
 
@@ -842,28 +871,27 @@ export default function Shell( CodeMirror_, opts ){
     doc.setSelection({ line: lineno, ch: prompt_len });
     cm.scrollIntoView({line: lineno, ch: prompt_len });
     */
-
   }
 
   /**
    * external function to set a prompt.  this is intended to be used with
-   * a delayed startup, where there may be text echoed to the screen (and 
+   * a delayed startup, where there may be text echoed to the screen (and
    * hence we need an initialized console) before we know what the correct
    * prompt is.
    */
-  this.prompt = function( text, className, is_continuation ){
-    set_prompt( text, className, is_continuation );	
-  };
+  this.prompt = function (text, className, is_continuation) {
+    set_prompt(text, className, is_continuation)
+  }
 
   /**
    * for external client that wants to execute a block of code with
    * side effects -- as if the user had typed it in.
    */
-  this.execute_block = function( code ){
-    let lines = code.split( /\n/g );
-    paste_buffer = paste_buffer.concat( lines );
-    exec_line( view );
-  };
+  this.execute_block = function (code) {
+    let lines = code.split(/\n/g)
+    paste_buffer = paste_buffer.concat(lines)
+    exec_line(view)
+  }
 
   /**
    * execute the current line.  this happens on enter as
@@ -871,165 +899,177 @@ export default function Shell( CodeMirror_, opts ){
    * get called multiple times -- once for each line in
    * the paste).
    */
-  function exec_line( view, cancel ){
-
-    if( state === EXEC_STATE.EXEC ){
-      return;
+  function exec_line(view, cancel) {
+    if (state === EXEC_STATE.EXEC) {
+      return
     }
 
-    var doc = view.state.doc;
-    var lineno = doc.lines;
-    var line = doc.line( lineno );
+    var doc = view.state.doc
+    var lineno = doc.lines
+    var line = doc.line(lineno)
     console.log("line", line)
 
     // TODO what is this?
     //doc.replaceRange( "\n", { line: lineno+1, ch: 0 }, undefined, "prompt");
     //var pos = doc.line(doc.lines).from;
     // insert newline at end of document
-    const docLength = doc.length;
-    view.dispatch({changes: {
-      //from: posToOffset(doc, { line: lineno, ch: 0 }),
-      from: docLength,
-      to: undefined,
-      insert: "\n",
-      // TODO class prompt?
-    }})
+    const docLength = doc.length
+    view.dispatch({
+      changes: {
+        //from: posToOffset(doc, { line: lineno, ch: 0 }),
+        from: docLength,
+        to: undefined,
+        insert: "\n",
+        // TODO class prompt?
+      },
+    })
     //doc.setCursor({ line: lineno+1, ch: 0 });
     //view.dispatch({selection: {anchor: posToOffset(doc, { line: lineno, ch: 0 })}})
     // doc.length is not-yet updated at this point
     // so we use docLength + 1
     //view.dispatch({selection: {anchor: docLength + 1}})
 
-    state = EXEC_STATE.EXEC;
-    var command;
+    state = EXEC_STATE.EXEC
+    var command
 
-    if( cancel ){
-      command = "";
-      command_buffer = [command];
-    }
-    else {
-      command = line.text.slice(prompt_len);
-      command_buffer.push(command);
+    if (cancel) {
+      command = ""
+      command_buffer = [command]
+    } else {
+      command = line.text.slice(prompt_len)
+      command_buffer.push(command)
     }
 
     // you can exec an empty line, but we don't put it into history.
     // the container can just do nothing on an empty command, if it
     // wants to, but it might want to know about it.
 
-    if( command.trim().length > 0 ){
-      
-      history.push(command);
-      history.save(); // this is perhaps unecessarily aggressive
-      
-    } 
+    if (command.trim().length > 0) {
+      history.push(command)
+      history.save() // this is perhaps unecessarily aggressive
+    }
 
     // this automatically resets the pointer (NOT windows style)
 
-    history.reset_pointer();
+    history.reset_pointer()
 
-    if( instance.opts.exec_function ){
-      
-      // turn on event caching.  if we're being called 
+    if (instance.opts.exec_function) {
+      // turn on event caching.  if we're being called
       // from a paste block, it might already be in place
       // so don't destroy it.
-      
-      if( !event_cache ) event_cache = [];
+
+      if (!event_cache) event_cache = []
 
       console.log("command_buffer", command_buffer)
 
-      instance.opts.exec_function.call( this, command_buffer, function handleResult(result) {
+      instance.opts.exec_function.call(
+        this,
+        command_buffer,
+        function handleResult(result) {
+          //console.log(`handleResult: result=${JSON.stringify(result)}`)
+          // handleResult: result={"parsestatus":"OK"}
 
-        //console.log(`handleResult: result=${JSON.stringify(result)}`)
-        // handleResult: result={"parsestatus":"OK"}
+          // UPDATE: new style of return where the command processor
+          // handles the multiline-buffer (specifically for R's debugger).
 
-        // UPDATE: new style of return where the command processor 
-        // handles the multiline-buffer (specifically for R's debugger).
-        
-        // in that case, always clear command buffer and accept the prompt
-        // from the callback.
+          // in that case, always clear command buffer and accept the prompt
+          // from the callback.
 
-        state = EXEC_STATE.EDIT;
-        
-        if( result && result.prompt ){
-          command_buffer = [];
-          set_prompt( result.prompt || instance.opts.initial_prompt, result.prompt_class, result.continuation );
-        }
-        else {
-          var parseStatus = result ? result.parsestatus || PARSE_STATUS.OK : PARSE_STATUS.NULL;
-          console.log(`handleResult: parseStatus=${JSON.stringify(parseStatus)}`)
-          if( parseStatus === PARSE_STATUS.INCOMPLETE ){
-            set_prompt( instance.opts.continuation_prompt, undefined, true );
+          state = EXEC_STATE.EDIT
+
+          if (result && result.prompt) {
+            command_buffer = []
+            set_prompt(
+              result.prompt || instance.opts.initial_prompt,
+              result.prompt_class,
+              result.continuation
+            )
+          } else {
+            var parseStatus = result
+              ? result.parsestatus || PARSE_STATUS.OK
+              : PARSE_STATUS.NULL
+            console.log(
+              `handleResult: parseStatus=${JSON.stringify(parseStatus)}`
+            )
+            if (parseStatus === PARSE_STATUS.INCOMPLETE) {
+              set_prompt(instance.opts.continuation_prompt, undefined, true)
+            } else {
+              command_buffer = []
+              set_prompt(instance.opts.initial_prompt)
+            }
           }
-          else {
-            command_buffer = [];
-            set_prompt( instance.opts.initial_prompt );
+
+          lineno = view.state.doc.lines
+
+          if (paste_buffer.length) {
+            console.log(`handleResult: setImmediate paste`)
+
+            setImmediate(function paste() {
+              var text = paste_buffer[0]
+              console.log(
+                `handleResult: setImmediate paste: text=${JSON.stringify(text)}`
+              )
+              paste_buffer.splice(0, 1)
+              // FIXME 5to6
+              doc.replaceRange(
+                text,
+                { line: lineno, ch: prompt_len },
+                undefined,
+                "paste-continuation"
+              )
+
+              // if the last line of the paste buffer is a newline, then exec.
+              // otherwise enter the text on the line and play back cached events.
+
+              if (paste_buffer.length) exec_line(view)
+              else playbackEvents()
+            })
+          } else {
+            console.log(`handleResult: setImmediate playbackEvents`)
+            setImmediate(playbackEvents)
           }
         }
-
-        lineno = view.state.doc.lines;
-
-        if( paste_buffer.length ){
-          console.log(`handleResult: setImmediate paste`)
-
-          setImmediate( function paste() {
-            var text = paste_buffer[0];
-            console.log(`handleResult: setImmediate paste: text=${JSON.stringify(text)}`)
-            paste_buffer.splice(0,1);
-            // FIXME 5to6
-            doc.replaceRange( text, { line: lineno, ch: prompt_len }, undefined, "paste-continuation");
-            
-            // if the last line of the paste buffer is a newline, then exec.  
-            // otherwise enter the text on the line and play back cached events.
-            
-            if( paste_buffer.length ) exec_line(view);
-            else playbackEvents();
-
-          });
-        }
-        else {
-          console.log(`handleResult: setImmediate playbackEvents`)
-          setImmediate( playbackEvents );
-        }
-        
-      });
+      )
     }
-
   }
 
   /**
    * clear console. two things to note: (1) this does not work in
    * exec state. (2) preserves last line, which we assume is a prompt/command.
    */
-  this.clear = function(focus){
-
-    var doc = view.state.doc;
-    var lastline = doc.lines;
-    if( lastline > 0 ){
-      view.dispatch({changes: {from: 0, to: doc.line(doc.lines).from, insert: ""}})
+  this.clear = function (focus) {
+    var doc = view.state.doc
+    var lastline = doc.lines
+    if (lastline > 0) {
+      view.dispatch({
+        changes: { from: 0, to: doc.line(doc.lines).from, insert: "" },
+      })
     }
 
-    // reset unstyled 
-    unstyled_lines.splice(0, unstyled_lines.length);
-    unstyled_flag = false;
+    // reset unstyled
+    unstyled_lines.splice(0, unstyled_lines.length)
+    unstyled_flag = false
 
-    block_reset.splice(0, block_reset.length);
-    
-    // move cursor to edit position 
-    var text = doc.line( doc.lines);
+    block_reset.splice(0, block_reset.length)
+
+    // move cursor to edit position
+    var text = doc.line(doc.lines)
     // FIXME
-    doc.setSelection({ line: doc.lines, ch: text.length });
+    doc.setSelection({ line: doc.lines, ch: text.length })
 
-    // optionally focus		
-    if( focus ) this.focus();
-    
-  };
+    // optionally focus
+    if (focus) this.focus()
+  }
 
   /**
    * get shell width in chars.  not sure how CM gets this (possibly a dummy node?)
    */
-  this.get_width_in_chars = function(){
-    return Math.floor( this.opts.container.clientWidth / view.defaultCharacterWidth) - instance.opts.initial_prompt.length;
-  };
+  this.get_width_in_chars = function () {
+    return (
+      Math.floor(this.opts.container.clientWidth / view.defaultCharacterWidth) -
+      instance.opts.initial_prompt.length
+    )
+  }
 
   /** refresh layout,  force on nonstandard resizes */
   /* TODO migrate
@@ -1041,121 +1081,127 @@ export default function Shell( CodeMirror_, opts ){
   /**
    * cancel the current line; clear parse buffer and reset history.
    */
-  this.cancel = function(){
-    exec_line( view, true );
-  };
+  this.cancel = function () {
+    exec_line(view, true)
+  }
 
   /**
    * get current line (peek)
    */
-  this.get_current_line = function(){
-    var doc = view.state.doc;
-    var line = doc.line(doc.lines);
-    var cursor = view.state.selection.main.head;
+  this.get_current_line = function () {
+    var doc = view.state.doc
+    var line = doc.line(doc.lines)
+    var cursor = view.state.selection.main.head
     return {
-      text: line.text.slice( prompt_len ),
+      text: line.text.slice(prompt_len),
       //pos: ( index == pos.line ? pos.ch - prompt_len : -1 ),
-      pos: ( cursor ? cursor - prompt_len : -1 ),
-    };
-  };
+      pos: cursor ? cursor - prompt_len : -1,
+    }
+  }
 
   /**
    * get line caret is on.  may include prompt.
    */
-  this.get_caret_line = function(){
-    var cursor = view.state.selection.main.head;
-    var line = view.state.doc.lineAt(cursor);
-    return { text: line, pos: cursor };
-  };
+  this.get_caret_line = function () {
+    var cursor = view.state.selection.main.head
+    var line = view.state.doc.lineAt(cursor)
+    return { text: line, pos: cursor }
+  }
 
   /**
    * get selections
    */
-  this.get_selections = function(){
-    return view.state.doc.getSelections();
-  };
+  this.get_selections = function () {
+    return view.state.doc.getSelections()
+  }
 
   /**
    * wrapper for focus call
    */
-  this.focus = function(){ view.focus(); };
+  this.focus = function () {
+    view.focus()
+  }
 
   /**
    * show function tip
    */
-  this.show_function_tip = function( text ){
-    
-    if( !this.function_tip ) this.function_tip = {};
-    if( text === this.function_tip.cached_tip ) return;
-    var where = view.cursorCoords();
-    this.function_tip.cached_tip = text;
-    if( !this.function_tip.node ){
-      this.function_tip.container_node = document.createElement( "div" );
-      this.function_tip.container_node.className = "cmjs-shell-function-tip-container";
-      this.function_tip.node = document.createElement( "div" );
-      this.function_tip.node.className = "cmjs-shell-function-tip";
-      this.function_tip.container_node.appendChild( this.function_tip.node );
-      opts.container.appendChild(this.function_tip.container_node);
+  this.show_function_tip = function (text) {
+    if (!this.function_tip) this.function_tip = {}
+    if (text === this.function_tip.cached_tip) return
+    var where = view.cursorCoords()
+    this.function_tip.cached_tip = text
+    if (!this.function_tip.node) {
+      this.function_tip.container_node = document.createElement("div")
+      this.function_tip.container_node.className =
+        "cmjs-shell-function-tip-container"
+      this.function_tip.node = document.createElement("div")
+      this.function_tip.node.className = "cmjs-shell-function-tip"
+      this.function_tip.container_node.appendChild(this.function_tip.node)
+      opts.container.appendChild(this.function_tip.container_node)
     }
-    this.function_tip.visible = true;
-    this.function_tip.node.innerHTML = text;
+    this.function_tip.visible = true
+    this.function_tip.node.innerHTML = text
 
     // the container/child lets you relatively position the tip in css
-    this.function_tip.container_node.setAttribute( "style", "top: " + where.top + "px; left: " + where.left + "px;" );
-    this.function_tip.container_node.classList.add( "visible" );
-  };
+    this.function_tip.container_node.setAttribute(
+      "style",
+      "top: " + where.top + "px; left: " + where.left + "px;"
+    )
+    this.function_tip.container_node.classList.add("visible")
+  }
 
   /**
-   * hide function tip.  
-   * 
+   * hide function tip.
+   *
    * @return true if we consumed the event, or false
    */
-  this.hide_function_tip = function( user ){
-    if( !this.function_tip ) return false;
-    if( !user ) this.function_tip.cached_tip = null;
-    if( this.function_tip.visible ){
-      this.function_tip.container_node.classList.remove( "visible" );
-      this.function_tip.visible = false;
-      return true;
+  this.hide_function_tip = function (user) {
+    if (!this.function_tip) return false
+    if (!user) this.function_tip.cached_tip = null
+    if (this.function_tip.visible) {
+      this.function_tip.container_node.classList.remove("visible")
+      this.function_tip.visible = false
+      return true
     }
-    return false;
-  };
+    return false
+  }
 
   /**
    * constructor body
    */
-  (function(){
-
-    opts = opts || {};
+  ;(function () {
+    opts = opts || {}
 
     // prompts
-    opts.initial_prompt = opts.initial_prompt || "> ";
-    opts.continuation_prompt = opts.continuation_prompt || "+ ";
+    opts.initial_prompt = opts.initial_prompt || "> "
+    opts.continuation_prompt = opts.continuation_prompt || "+ "
 
     // dummy functions
-    opts.exec_function = opts.exec_function || function( cmd, callback ){
-      if( opts.debug ) console.info( "DUMMY" );
-      var ps = PARSE_STATUS.OK;
-      var err = null;
-      if( cmd.length ){
-        if( cmd[cmd.length-1].match( /_\s*$/)) ps = PARSE_STATUS.INCOMPLETE;
+    opts.exec_function =
+      opts.exec_function ||
+      function (cmd, callback) {
+        if (opts.debug) console.info("DUMMY")
+        var ps = PARSE_STATUS.OK
+        var err = null
+        if (cmd.length) {
+          if (cmd[cmd.length - 1].match(/_\s*$/)) ps = PARSE_STATUS.INCOMPLETE
+        }
+        callback.call(this, { parsestatus: ps, err: err })
       }
-      callback.call(this, { parsestatus: ps, err: err });
-    };
-    opts.function_key_callback = opts.function_key_callback || function(){};
+    opts.function_key_callback = opts.function_key_callback || function () {}
 
     // container is string (id) or node
-    opts.container = opts.container || document.body;
-    if( typeof( opts.container ) === "string" ){
-      opts.container = document.querySelector(opts.container);
+    opts.container = opts.container || document.body
+    if (typeof opts.container === "string") {
+      opts.container = document.querySelector(opts.container)
     }
 
     // special codemirror mode to support unstyled blocks (full lines only)
-    let modename = "unstyled-overlay";
-    init_overlay_mode( opts.mode );
-    
-        // remove default to inputStyle -> contenteditable.  CM seems to be 
-        // checking for key existence, so undefined doesn't work.  add if necessary.
+    let modename = "unstyled-overlay"
+    init_overlay_mode(opts.mode)
+
+    // remove default to inputStyle -> contenteditable.  CM seems to be
+    // checking for key existence, so undefined doesn't work.  add if necessary.
 
     let PS1 = "> " // node
     //let PS1 = "~ $ " // bash
@@ -1172,7 +1218,7 @@ export default function Shell( CodeMirror_, opts ){
       return [
         {
           from: 0,
-          to: targetState.doc.line(targetState.doc.lines).from + PS1.length
+          to: targetState.doc.line(targetState.doc.lines).from + PS1.length,
         },
       ]
     }
@@ -1186,14 +1232,14 @@ export default function Shell( CodeMirror_, opts ){
         preventDefault: true, // insert newline in exec_line
         // cursor can be in the middle of the last line
         run: (view, event) => {
-          console.log("Enter", view, event);
-          exec_line( view );
+          console.log("Enter", view, event)
+          exec_line(view)
           //return true; // no effect
         },
       },
     ]
 
-    console.log("keymaps", {terminalKeymap, historyKeymap, defaultKeymap})
+    console.log("keymaps", { terminalKeymap, historyKeymap, defaultKeymap })
 
     // NOTE this must come before other extensions like basicSetup
     // https://discuss.codemirror.net/t/enter-and-backspace-key-not-passed-to-keydown-dom-event-handler/3887
@@ -1254,43 +1300,45 @@ export default function Shell( CodeMirror_, opts ){
       */
     })
 
+    var inputfield = view.contentDOM
 
+    inputfield.addEventListener("keydown", cacheEvent)
+    inputfield.addEventListener("keyup", cacheEvent)
+    inputfield.addEventListener("keypress", cacheEvent)
+    inputfield.addEventListener("char", cacheEvent)
 
-    var inputfield = view.contentDOM;
+    // if you suppress the initial prompt, you must call the "prompt" method
 
-    inputfield.addEventListener( "keydown", cacheEvent );
-    inputfield.addEventListener( "keyup", cacheEvent );
-    inputfield.addEventListener( "keypress", cacheEvent );
-    inputfield.addEventListener( "char", cacheEvent );
+    if (!opts.suppress_initial_prompt) set_prompt(opts.initial_prompt)
 
-    // if you suppress the initial prompt, you must call the "prompt" method 
-  
-    if( !opts.suppress_initial_prompt ) set_prompt( opts.initial_prompt );
-    
-    var local_hint_function = null;
-    if( opts.hint_function ){
-      local_hint_function = function( cm, callback ){
+    var local_hint_function = null
+    if (opts.hint_function) {
+      local_hint_function = function (cm, callback) {
+        var doc = cm.state.doc
+        var line = doc.line(doc.lines)
+        var cursor = cm.state.selection.main.head
+        var plen = prompt_len
 
-        var doc = cm.state.doc;
-        var line = doc.line(doc.lines);
-        var cursor = cm.state.selection.main.head;
-        var plen = prompt_len;
-
-        opts.hint_function.call( instance, line.substr(plen), cursor - plen, function( completions, position ){
-          if( !completions || !completions.length ){
-            callback(null);
+        opts.hint_function.call(
+          instance,
+          line.substr(plen),
+          cursor - plen,
+          function (completions, position) {
+            if (!completions || !completions.length) {
+              callback(null)
+            } else {
+              // FIXME cursor -> pos
+              callback({
+                list: completions,
+                from: { line: pos.line, ch: position + plen },
+                to: { line: pos.line, ch: cursor },
+              })
+            }
           }
-          else {
-            // FIXME cursor -> pos
-            callback({ list: completions,
-              from: { line: pos.line, ch: position + plen },
-              to: { line: pos.line, ch: cursor } });
-          }
-        });
-
-      };
+        )
+      }
       // @ts-ignore
-      local_hint_function.async = true;
+      local_hint_function.async = true
     }
 
     // FIXME handle events. dispatch?
@@ -1557,14 +1605,12 @@ export default function Shell( CodeMirror_, opts ){
   */
 
     // FIXME: optional
-    history.restore();
+    history.restore()
 
     // expose the options object
-    instance.opts = opts;
+    instance.opts = opts
 
     // this is exported for debug purposes (FIXME: flag)
-    if( opts.debug ) instance.cm = view;
-
-  })();
-
+    if (opts.debug) instance.cm = view
+  })()
 }
