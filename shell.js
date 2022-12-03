@@ -73,9 +73,9 @@ const editor = EditorView({
 import { EditorView, Decoration, keymap } from "@codemirror/view"
 import { StateField, StateEffect } from "@codemirror/state"
 import { StreamLanguage } from "@codemirror/language"
-import { javascript } from "@codemirror/lang-javascript"
-import { parseMixed } from "@lezer/common"
-import readOnlyRangesExtension from "codemirror-readonly-ranges"
+//import { javascript } from "@codemirror/lang-javascript"
+//import { parseMixed } from "@lezer/common"
+//import readOnlyRangesExtension from "codemirror-readonly-ranges"
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands"
 
 import setImmediate from "queue-microtask"
@@ -151,7 +151,7 @@ const markFieldExtension = StateField.define({
  * function_key_callback: called on function keys (+ some others)
  *
  */
-export default function Shell(CodeMirror_, opts) {
+export default function Shell(opts) {
   /** @type {import("codemirror").EditorView} */
   var view
 
@@ -303,7 +303,7 @@ export default function Shell(CodeMirror_, opts) {
 
       // FIXME TypeError: Cannot read properties of undefined (reading 'unit')
       indent:
-        base.indent &&
+        base?.indent &&
         function (state, textAfter) {
           console.log("outerLanguage indent", { base, state, textAfter })
           return base.indent(state.base, textAfter)
@@ -1234,7 +1234,8 @@ export default function Shell(CodeMirror_, opts) {
         run: (view, event) => {
           console.log("Enter", view, event)
           exec_line(view)
-          //return true; // no effect
+          return true; // dont call other handlers
+          // defaultKeymap would insert \n
         },
       },
     ]
@@ -1264,8 +1265,8 @@ export default function Shell(CodeMirror_, opts) {
         //readOnlyRangesExtension(getReadOnlyRanges),
         // NO NOTE terminalKeymap must come before defaultKeymap,
         // so we can handle "Enter" https://discuss.codemirror.net/t/enter-and-backspace-key-not-passed-to-keydown-dom-event-handler/3887
-        //keymap.of([...terminalKeymap, ...defaultKeymap, ...historyKeymap]),
-        keymap.of([...terminalKeymap]),
+        keymap.of([...terminalKeymap, ...defaultKeymap, ...historyKeymap]),
+        //keymap.of([...terminalKeymap]),
         //handleEvents,
       ],
       doc: "",
