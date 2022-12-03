@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.1" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <title>terminal</title>
+  <desc>based on feathericon/build/svg/terminal.svg</desc>
+  <g id="production">
+    <path id="Shape" d="m4 4h16c1.1046 0 2 0.89543 2 2v12c0 1.1046-0.89543 2-2 2h-16c-1.1046 0-2-0.89543-2-2v-12c0-1.1046 0.89543-2 2-2z"/>
+    <path d="m4 6v12h16v-12z" fill="#fff"/>
+    <path d="m10.985 11.571-3.5355 3.5355-1.4142-1.4142 2.1213-2.1213-2.1213-2.1213 1.4142-1.4142z"/>
+    <path d="m12 14h6v2h-6z"/>
+  </g>
+</svg>

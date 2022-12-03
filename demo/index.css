@@ -1,0 +1,23 @@
+#shell-container {
+  width: 600px;
+  height: 400px;
+  border: 1px solid gray;
+  margin: 0 auto;
+  position: relative;
+}
+
+#shell-container .CodeMirror {
+  height: 100%;
+  width: 100%;
+  font-family: consolas, 'ubuntu mono', monospace;
+  font-size: 10pt;
+}
+
+.shell-error {
+  background: red;
+  color: white !important;
+}
+
+.banner {
+  color: white !important;
+}

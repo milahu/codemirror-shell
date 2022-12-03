@@ -1,0 +1,13 @@
+                  _           _          _ _ 
+                 (_)         | |        | | |
+    ___ _ __ ___  _ ___   ___| |__   ___| | |
+   / __| '_ ` _ \| / __| / __| '_ \ / _ \ | |
+  | (__| | | | | | \__ \ \__ \ | | |  __/ | |
+   \___|_| |_| |_| |___/ |___/_| |_|\___|_|_|
+                _/ |                         
+               |__/                          
+
+  This is a demo of cmjs-shell.  It's not really intended for browsers
+  (it was built for electron), but it should work ok.  Here there's a
+  javascript interpreter provided for test purposes.  Enjoy!
+
