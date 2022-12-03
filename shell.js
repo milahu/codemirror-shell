@@ -85,47 +85,47 @@ export default function Shell( CodeMirror_, opts ){
 	 * slightly, then down, up, modifications are retained.  reverts
 	 * on new command.
 	 */
-	var history = {
+	class History {
 
-		current_line: null,
-		commands: [],
-		actual_commands: [],
-		pointer: 0,
+		current_line = null
+		commands = []
+		actual_commands = []
+		pointer = 0
 
-		reset_pointer: function(){
+		reset_pointer(){
 			this.pointer = 0;
 			this.commands = this.actual_commands.slice(0);
-		},
+		}
 
-		push: function( line ){
+		push( line ){
 			this.actual_commands.push( line );
 			this.commands = this.actual_commands.slice(0);
-		},
+		}
 		
-		save: function(opts){
+		save(opts){
 			opts = opts || {};
 			var max = opts.max || MAX_HISTORY_DEFAULT;
 			var key = opts.key || HISTORY_KEY_DEFAULT;
 			localStorage.setItem( key, JSON.stringify( this.actual_commands.slice(-max)));
-		},
+		}
 		
-		restore: function(opts){
+		restore(opts){
 			opts = opts || {};
 			var key = opts.key || HISTORY_KEY_DEFAULT;
 			var val = localStorage.getItem(key);
 			if( val ) this.actual_commands = JSON.parse( val );
 			this.reset_pointer();
-		},
+		}
 
-        clear: function(){
-            this.actual_commands = [];
-            this.commands = [];
-            this.pointer = 0;
-            this.save();
-        }
-		
-
+		clear(){
+				this.actual_commands = [];
+				this.commands = [];
+				this.pointer = 0;
+				this.save();
+		}
 	};
+
+	const history = new History();
 
 	/**
 	 * overlay mode to support unstyled text -- file contents (the pager)
