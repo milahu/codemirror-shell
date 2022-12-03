@@ -22,18 +22,12 @@
  *
  */
 
-(function(){
-
-"use strict";
-
-// enums will get exported
-
-var EXEC_STATE = {
+export const EXEC_STATE = {
 	EDIT: "edit",
 	EXEC: "exec"
 };
 
-var PARSE_STATUS = {
+export const PARSE_STATUS = {
 	NULL: "",
 	OK: "OK",
 	INCOMPLETE: "Incomplete",
@@ -62,7 +56,7 @@ const DEFAULT_PROMPT_CLASS = "shell-prompt";
  * function_key_callback: called on function keys (+ some others)
  *
  */
-var Shell = function( CodeMirror_, opts ){
+export default function Shell( CodeMirror_, opts ){
 
 	var cm;
 	var state = EXEC_STATE.EDIT;
@@ -1178,14 +1172,4 @@ var Shell = function( CodeMirror_, opts ){
 
 	})();
 
-};
-
-// export the enum types on the prototype
-Shell.prototype.EXEC_STATE = EXEC_STATE;
-Shell.prototype.PARSE_STATUS = PARSE_STATUS;
-
-// and the factory as a module (or to the browser)
-if( typeof module !== "undefined" ) module.exports = Shell;
-else window.Shell = Shell;
-
-})();
+}
