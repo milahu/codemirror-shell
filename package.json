@@ -12,11 +12,14 @@
 		"url": "https://github.com/sdllc/cmjs-shell.git"
 	},
 	"main": "shell.js",
-
 	"scripts": {
 		"pretty": "prettier --write shell.js"
 	},
 	"devDependencies": {
-		"prettier": "^2.8.0"
+		"@codemirror/commands": "^6.1.2",
+		"@codemirror/state": "^6.1.4",
+		"@codemirror/view": "^6.6.0",
+		"prettier": "^2.8.0",
+		"queue-microtask": "^1.2.3"
 	}
 }
