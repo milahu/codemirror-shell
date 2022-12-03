@@ -16,7 +16,7 @@ export default defineConfig({
     outDir: path.resolve('../docs'),
     emptyOutDir: true,
     target: 'esnext',
-    minify: false,
+    //minify: false,
     rollupOptions: {
       output: {
         ...outputDefaults,
