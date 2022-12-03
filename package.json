@@ -3,10 +3,20 @@
 	"version": "0.3.10",
 	"license": "MIT",
 	"description": "Command shell based on CodeMirror.",
-	"keywords": ["shell", "console"],
+	"keywords": [
+		"shell",
+		"console"
+	],
 	"repository": {
-		"type" : "git",
-		"url" : "https://github.com/sdllc/cmjs-shell.git"
+		"type": "git",
+		"url": "https://github.com/sdllc/cmjs-shell.git"
 	},
-	"main": "shell.js"
+	"main": "shell.js",
+
+	"scripts": {
+		"pretty": "prettier --write shell.js"
+	},
+	"devDependencies": {
+		"prettier": "^2.8.0"
+	}
 }
