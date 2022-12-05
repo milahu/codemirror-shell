@@ -556,6 +556,23 @@ export default function Shell(opts) {
     view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } })
   }
 
+  this.scrollToEnd = function scrollToEnd() {
+
+    var doc = view.state.doc
+
+    //console.log(`doc.length ${doc.length}`)
+
+    // wait for new doc.length
+    //setImmediate(() => {
+      //console.log(`setImmediate doc.length ${doc.length}`)
+      // scroll to end
+      view.dispatch({ effects: EditorView.scrollIntoView(doc.length) })
+      // set cursor
+      view.dispatch({ selection: { anchor: view.state.doc.length } })
+    //})
+
+  }
+
   /**
    * handler for command responses, stuff that the system
    * sends to the shell (callbacks, generally).  optional className is a
@@ -708,15 +725,8 @@ export default function Shell(opts) {
       cm.scrollIntoView({line: doc.lines, ch: endch});
     }
     */
-    //view.dispatch({effects: EditorView.scrollIntoView(doc.line(doc.lines).from)})
-    // scroll to end
-    view.dispatch({ effects: EditorView.scrollIntoView(doc.length) })
 
-    // wait for new doc.length, then set cursor
-    //setImmediate(() => view.dispatch({selection: {anchor: doc.length}})); // old doc -> wrong length
-    setImmediate(() =>
-      view.dispatch({ selection: { anchor: view.state.doc.length } })
-    )
+    this.scrollToEnd()
 
     // the problem with that is that it's annoying when you want to see
     // the messages (for long-running code, for example).
@@ -965,6 +975,7 @@ export default function Shell(opts) {
       instance.opts.exec_function.call(
         this,
         command_buffer,
+        // callback
         function handleResult(result) {
           //console.log(`handleResult: result=${JSON.stringify(result)}`)
           // handleResult: result={"parsestatus":"OK"}
@@ -1028,6 +1039,7 @@ export default function Shell(opts) {
             console.log(`handleResult: setImmediate playbackEvents`)
             setImmediate(playbackEvents)
           }
+          instance.scrollToEnd()
         }
       )
     }
